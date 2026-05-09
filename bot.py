@@ -26,6 +26,7 @@ MAVZULAR = {
     "ish_haqi":  "Ish haqi masalalari",
     "hujjat":    "Hujjatlar va ma'lumotnoma",
     "shikoyat":  "Shikoyat va takliflar",
+    "SKUD":    "SKUD",
     "boshqa":    "Boshqa",
 }
 
