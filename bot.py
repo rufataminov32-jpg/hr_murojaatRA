@@ -621,17 +621,17 @@ def main():
     app.add_handler(CommandHandler("hr_qosh",       hr_qosh_command))
     app.add_handler(CommandHandler("bekor",         bekor))
 
+    app.add_handler(CallbackQueryHandler(men_murojaat_ko,      pattern="^men_mko_"))
+    app.add_handler(CallbackQueryHandler(men_orqaga_callback,  pattern="^men_orqaga$"))
     app.add_handler(CallbackQueryHandler(mavzu_tanlandi,       pattern="^mvz_"))
+    app.add_handler(CallbackQueryHandler(hr_xodimlar_callback, pattern="^hr_xodimlar$"))
+    app.add_handler(CallbackQueryHandler(hr_del_callback,      pattern="^hr_del_"))
+    app.add_handler(CallbackQueryHandler(hr_orqaga_callback,   pattern="^hr_orqaga$"))
     app.add_handler(CallbackQueryHandler(hr_list_callback,     pattern="^hr_list_"))
     app.add_handler(CallbackQueryHandler(murojaat_ko,          pattern="^mko_"))
     app.add_handler(CallbackQueryHandler(holat_callback,       pattern="^holat_"))
     app.add_handler(CallbackQueryHandler(rad_callback,         pattern="^rad_"))
     app.add_handler(CallbackQueryHandler(javob_callback,       pattern="^javob_"))
-    app.add_handler(CallbackQueryHandler(hr_xodimlar_callback, pattern="^hr_xodimlar$"))
-    app.add_handler(CallbackQueryHandler(hr_del_callback,      pattern="^hr_del_"))
-    app.add_handler(CallbackQueryHandler(hr_orqaga_callback,   pattern="^hr_orqaga$"))
-    app.add_handler(CallbackQueryHandler(men_murojaat_ko,      pattern="^men_mko_"))
-    app.add_handler(CallbackQueryHandler(men_orqaga_callback,  pattern="^men_orqaga$"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, xabar_dispatcher))
 
