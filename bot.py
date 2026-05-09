@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime, timezone, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
@@ -19,7 +20,6 @@ BOSH_HR_ID = int(os.environ["BOSH_HR_ID"])
 logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Conversation steps
 STEP_FISH, STEP_TELEFON, STEP_MAVZU, STEP_XABAR = range(4)
 
 MAVZULAR = {
@@ -40,6 +40,17 @@ HOLATLAR = {
 
 # ─── YORDAMCHI ───────────────────────────────────────────────────────────────
 
+def uzb_vaqt(dt_str: str) -> str:
+    """UTC vaqtni O'zbekiston vaqtiga (UTC+5) o'giradi"""
+    try:
+        dt = datetime.strptime(dt_str[:16], "%Y-%m-%d %H:%M")
+        dt_utc = dt.replace(tzinfo=timezone.utc)
+        dt_uzb = dt_utc + timedelta(hours=5)
+        return dt_uzb.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return dt_str[:16]
+
+
 def is_hr(user_id: int) -> bool:
     return user_id == BOSH_HR_ID or hr_bormi(user_id)
 
@@ -54,12 +65,12 @@ def mavzu_keyboard():
 def holat_keyboard(raqam: str):
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("Ko'rildi",    callback_data=f"holat_korildi_{raqam}"),
-            InlineKeyboardButton("Jarayonda",   callback_data=f"holat_jarayonda_{raqam}"),
+            InlineKeyboardButton("Ko'rildi",     callback_data=f"holat_korildi_{raqam}"),
+            InlineKeyboardButton("Jarayonda",    callback_data=f"holat_jarayonda_{raqam}"),
         ],
         [
-            InlineKeyboardButton("Hal qilindi", callback_data=f"holat_hal_{raqam}"),
-            InlineKeyboardButton("Rad qilish",  callback_data=f"rad_{raqam}"),
+            InlineKeyboardButton("Hal qilindi",  callback_data=f"holat_hal_{raqam}"),
+            InlineKeyboardButton("Rad qilish",   callback_data=f"rad_{raqam}"),
         ],
         [
             InlineKeyboardButton("Javob berish", callback_data=f"javob_{raqam}"),
@@ -72,7 +83,7 @@ def hr_murojaat_matni(m: dict) -> str:
     matn = (
         f"Murojaat {m['raqam']}\n"
         f"{'─' * 30}\n"
-        f"Sana: {m['yaratilgan'][:16]}\n"
+        f"Sana: {uzb_vaqt(m['yaratilgan'])}\n"
         f"Holat: {holat}\n"
         f"{'─' * 30}\n"
         f"FISH: {m['fish']}\n"
@@ -93,8 +104,8 @@ def user_murojaat_matni(m: dict) -> str:
     matn = (
         f"Murojaat {m['raqam']}\n"
         f"{'─' * 30}\n"
-        f"Yuborilgan sana: {m['yaratilgan'][:16]}\n"
-        f"Yangilangan: {m['yangilangan'][:16]}\n"
+        f"Yuborilgan sana: {uzb_vaqt(m['yaratilgan'])}\n"
+        f"Yangilangan: {uzb_vaqt(m['yangilangan'])}\n"
         f"Holat: {holat}\n"
         f"{'─' * 30}\n"
         f"Mavzu: {m['mavzu']}\n\n"
@@ -115,7 +126,7 @@ async def hr_larga_yuborish(bot, matn: str, keyboard=None):
             logger.warning("HR ga yuborishda xato (ID %s): %s", uid, e)
 
 
-# ─── FOYDALANUVCHI — MUROJAAT JARAYONI ───────────────────────────────────────
+# ─── FOYDALANUVCHI ───────────────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -212,19 +223,15 @@ async def mavzu_tanlandi(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def xabar_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
 
-    # HR javob berish
     if context.user_data.get("javob_kutilmoqda") and is_hr(uid):
         await javob_matn_qabul(update, context)
         return
 
-    # HR rad qilish sababi
     if context.user_data.get("rad_kutilmoqda") and is_hr(uid):
         await rad_sabab_qabul(update, context)
         return
 
-    # Murojaat jarayoni
     step = context.user_data.get("step")
-
     if step == STEP_FISH:
         await fish_qabul(update, context)
     elif step == STEP_TELEFON:
@@ -278,10 +285,10 @@ async def xabar_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     foydalanuvchi = update.effective_user
-    matn     = update.message.text
-    fish     = context.user_data.get("fish", "")
-    telefon  = context.user_data.get("telefon", "")
-    mavzu    = context.user_data.get("mavzu", "Noma'lum")
+    matn    = update.message.text
+    fish    = context.user_data.get("fish", "")
+    telefon = context.user_data.get("telefon", "")
+    mavzu   = context.user_data.get("mavzu", "Noma'lum")
 
     m = murojaat_qoshish(
         user_id      = foydalanuvchi.id,
@@ -298,7 +305,7 @@ async def xabar_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"Murojaatingiz qabul qilindi!\n\n"
         f"Murojaat raqami: {m['raqam']}\n"
-        f"Yuborilgan sana: {m['yaratilgan'][:16]}\n"
+        f"Yuborilgan sana: {uzb_vaqt(m['yaratilgan'])}\n"
         f"Holat: {HOLATLAR['yangi']}\n\n"
         f"Murojaatlaringizni kuzatish: /murojaatlarim\n\n"
         f"Yana murojaat qilmoqchimisiz? /murojaat"
@@ -325,12 +332,12 @@ async def hr_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rad     = sum(1 for m in murojaatlar if m["holat"] == "rad")
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"Yangi ({yangi})",          callback_data="hr_list_yangi"),
-         InlineKeyboardButton(f"Jarayonda ({jarayon})",    callback_data="hr_list_jarayonda")],
-        [InlineKeyboardButton(f"Hal qilingan ({hal})",     callback_data="hr_list_hal"),
-         InlineKeyboardButton(f"Rad qilingan ({rad})",     callback_data="hr_list_rad")],
+        [InlineKeyboardButton(f"Yangi ({yangi})",           callback_data="hr_list_yangi"),
+         InlineKeyboardButton(f"Jarayonda ({jarayon})",     callback_data="hr_list_jarayonda")],
+        [InlineKeyboardButton(f"Hal qilingan ({hal})",      callback_data="hr_list_hal"),
+         InlineKeyboardButton(f"Rad qilingan ({rad})",      callback_data="hr_list_rad")],
         [InlineKeyboardButton(f"Hammasi ({len(murojaatlar)})", callback_data="hr_list_all")],
-        [InlineKeyboardButton("HR xodimlar",               callback_data="hr_xodimlar")],
+        [InlineKeyboardButton("HR xodimlar",                callback_data="hr_xodimlar")],
     ])
 
     await update.message.reply_text(
@@ -420,7 +427,7 @@ async def holat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"Murojaatingiz holati yangilandi!\n\n"
                  f"Raqam: {raqam}\n"
                  f"Mavzu: {m['mavzu']}\n"
-                 f"Sana: {m['yaratilgan'][:16]}\n"
+                 f"Sana: {uzb_vaqt(m['yaratilgan'])}\n"
                  f"Holat: {holat_nomi}\n\n"
                  f"Batafsil: /murojaatlarim"
         )
@@ -465,7 +472,7 @@ async def rad_sabab_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"Murojaatingiz rad qilindi.\n\n"
                  f"Raqam: {raqam}\n"
                  f"Mavzu: {m['mavzu']}\n"
-                 f"Sana: {m['yaratilgan'][:16]}\n\n"
+                 f"Sana: {uzb_vaqt(m['yaratilgan'])}\n\n"
                  f"Sabab:\n{sabab}\n\n"
                  f"Batafsil: /murojaatlarim"
         )
@@ -512,7 +519,7 @@ async def javob_matn_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"Murojaatingizga HR bo'limidan javob keldi!\n\n"
                  f"Raqam: {raqam}\n"
                  f"Mavzu: {m['mavzu']}\n"
-                 f"Yuborilgan sana: {m['yaratilgan'][:16]}\n\n"
+                 f"Yuborilgan sana: {uzb_vaqt(m['yaratilgan'])}\n\n"
                  f"Javob:\n{javob}\n\n"
                  f"Batafsil: /murojaatlarim"
         )
@@ -586,12 +593,12 @@ async def hr_orqaga_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     rad     = sum(1 for m in murojaatlar if m["holat"] == "rad")
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"Yangi ({yangi})",          callback_data="hr_list_yangi"),
-         InlineKeyboardButton(f"Jarayonda ({jarayon})",    callback_data="hr_list_jarayonda")],
-        [InlineKeyboardButton(f"Hal qilingan ({hal})",     callback_data="hr_list_hal"),
-         InlineKeyboardButton(f"Rad qilingan ({rad})",     callback_data="hr_list_rad")],
+        [InlineKeyboardButton(f"Yangi ({yangi})",           callback_data="hr_list_yangi"),
+         InlineKeyboardButton(f"Jarayonda ({jarayon})",     callback_data="hr_list_jarayonda")],
+        [InlineKeyboardButton(f"Hal qilingan ({hal})",      callback_data="hr_list_hal"),
+         InlineKeyboardButton(f"Rad qilingan ({rad})",      callback_data="hr_list_rad")],
         [InlineKeyboardButton(f"Hammasi ({len(murojaatlar)})", callback_data="hr_list_all")],
-        [InlineKeyboardButton("HR xodimlar",               callback_data="hr_xodimlar")],
+        [InlineKeyboardButton("HR xodimlar",                callback_data="hr_xodimlar")],
     ])
 
     await query.edit_message_text(
