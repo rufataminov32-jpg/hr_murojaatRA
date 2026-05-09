@@ -132,8 +132,10 @@ async def hr_larga_yuborish(bot, matn: str, keyboard=None):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "Salom!\n\n"
+        "Assalomu alaykum, !\n\n"
+        
         "HR bo'limiga murojaat qilish uchun /murojaat buyrug'ini yuboring.\n"
+        
         "Murojaatlaringizni ko'rish uchun /murojaatlarim buyrug'ini yuboring."
     )
 
