@@ -19,6 +19,9 @@ BOSH_HR_ID = int(os.environ["BOSH_HR_ID"])
 logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Conversation steps
+STEP_FISH, STEP_TELEFON, STEP_MAVZU, STEP_XABAR = range(4)
+
 MAVZULAR = {
     "ish_haqi":  "Ish haqi masalalari",
     "hujjat":    "Hujjatlar va ma'lumotnoma",
@@ -68,16 +71,20 @@ def hr_murojaat_matni(m: dict) -> str:
     holat = HOLATLAR.get(m["holat"], m["holat"])
     matn = (
         f"Murojaat {m['raqam']}\n"
-        f"Mavzu: {m['mavzu']}\n"
+        f"{'─' * 30}\n"
         f"Sana: {m['yaratilgan'][:16]}\n"
-        f"Holat: {holat}\n\n"
-        f"Murojaatchi: {m['ism']}"
+        f"Holat: {holat}\n"
+        f"{'─' * 30}\n"
+        f"FISH: {m['fish']}\n"
+        f"Telefon: {m['telefon']}\n"
+        f"Telegram: {m['telegram_ism']}"
         f"{' (@' + m['username'] + ')' if m['username'] else ''}\n"
-        f"ID: {m['user_id']}\n\n"
+        f"{'─' * 30}\n"
+        f"Mavzu: {m['mavzu']}\n\n"
         f"Xabar:\n{m['matn']}"
     )
     if m.get("javob"):
-        matn += f"\n\nJavob:\n{m['javob']}"
+        matn += f"\n{'─' * 30}\nJavob:\n{m['javob']}"
     return matn
 
 
@@ -85,13 +92,16 @@ def user_murojaat_matni(m: dict) -> str:
     holat = HOLATLAR.get(m["holat"], m["holat"])
     matn = (
         f"Murojaat {m['raqam']}\n"
-        f"Mavzu: {m['mavzu']}\n"
-        f"Sana: {m['yaratilgan'][:16]}\n"
-        f"Holat: {holat}\n\n"
+        f"{'─' * 30}\n"
+        f"Yuborilgan sana: {m['yaratilgan'][:16]}\n"
+        f"Yangilangan: {m['yangilangan'][:16]}\n"
+        f"Holat: {holat}\n"
+        f"{'─' * 30}\n"
+        f"Mavzu: {m['mavzu']}\n\n"
         f"Sizning xabaringiz:\n{m['matn']}"
     )
     if m.get("javob"):
-        matn += f"\n\nHR javobi:\n{m['javob']}"
+        matn += f"\n{'─' * 30}\nHR javobi:\n{m['javob']}"
     return matn
 
 
@@ -105,62 +115,25 @@ async def hr_larga_yuborish(bot, matn: str, keyboard=None):
             logger.warning("HR ga yuborishda xato (ID %s): %s", uid, e)
 
 
-# ─── FOYDALANUVCHI ───────────────────────────────────────────────────────────
+# ─── FOYDALANUVCHI — MUROJAAT JARAYONI ───────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "Salom!\n\nHR bo'limiga murojaat qilish uchun mavzuni tanlang:",
-        reply_markup=mavzu_keyboard(),
+        "Salom!\n\n"
+        "HR bo'limiga murojaat qilish uchun /murojaat buyrug'ini yuboring.\n"
+        "Murojaatlaringizni ko'rish uchun /murojaatlarim buyrug'ini yuboring."
     )
 
 
-async def mavzu_tanlandi(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    kalit = query.data.replace("mvz_", "")
-    if kalit not in MAVZULAR:
-        return
-    context.user_data["mavzu"] = MAVZULAR[kalit]
-    context.user_data["kutilmoqda"] = True
-    await query.edit_message_text(
-        f"Mavzu: {MAVZULAR[kalit]}\n\n"
-        f"Murojaatingizni yozing. Xabaringiz HR bo'limiga yuboriladi.",
-    )
-
-
-async def xabar_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.user_data.get("kutilmoqda"):
-        await update.message.reply_text(
-            "Murojaat qilish uchun avval mavzuni tanlang:",
-            reply_markup=mavzu_keyboard(),
-        )
-        return
-
-    foydalanuvchi = update.effective_user
-    mavzu    = context.user_data.get("mavzu", "Noma'lum")
-    matn     = update.message.text
-    ism      = foydalanuvchi.full_name
-    username = foydalanuvchi.username
-    user_id  = foydalanuvchi.id
-
-    m = murojaat_qoshish(user_id, ism, username, mavzu, matn)
+async def murojaat_boshlash(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
-    logger.info("Yangi murojaat %s: %s (%s)", m["raqam"], ism, user_id)
-
+    context.user_data["step"] = STEP_FISH
     await update.message.reply_text(
-        f"Murojaatingiz qabul qilindi!\n\n"
-        f"Murojaat raqamingiz: {m['raqam']}\n"
-        f"Holat: {HOLATLAR['yangi']}\n\n"
-        f"Murojaatlaringizni ko'rish: /murojaatlarim\n\n"
-        f"Yana murojaat qilmoqchimisiz? Mavzuni tanlang:",
-        reply_markup=mavzu_keyboard(),
-    )
-
-    await hr_larga_yuborish(
-        context.bot,
-        hr_murojaat_matni(m),
-        holat_keyboard(m["raqam"]),
+        "Murojaat qilish uchun bir necha savol:\n\n"
+        "1/4 — Familiya Ism Sharifingizni kiriting:\n"
+        "(Masalan: Karimov Sardor Aliyevich)\n\n"
+        "/bekor — bekor qilish"
     )
 
 
@@ -168,7 +141,10 @@ async def mening_murojaatlarim(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     murojaatlar = foydalanuvchi_murojaatlari(user_id)
     if not murojaatlar:
-        await update.message.reply_text("Sizda hali murojaatlar yo'q.")
+        await update.message.reply_text(
+            "Sizda hali murojaatlar yo'q.\n\n"
+            "Murojaat qilish uchun /murojaat yuboring."
+        )
         return
 
     keyboard = []
@@ -178,7 +154,7 @@ async def mening_murojaatlarim(update: Update, context: ContextTypes.DEFAULT_TYP
         keyboard.append([InlineKeyboardButton(tugma, callback_data=f"men_mko_{m['raqam']}")])
 
     await update.message.reply_text(
-        f"Sizning murojaatlaringiz ({len(murojaatlar)} ta):\n\n"
+        f"Sizning murojaatlaringiz ({len(murojaatlar)} ta):\n"
         f"Batafsil ko'rish uchun bosing:",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
@@ -218,6 +194,123 @@ async def men_orqaga_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 
+async def mavzu_tanlandi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    kalit = query.data.replace("mvz_", "")
+    if kalit not in MAVZULAR:
+        return
+    context.user_data["mavzu"] = MAVZULAR[kalit]
+    context.user_data["step"] = STEP_XABAR
+    await query.edit_message_text(
+        f"Mavzu: {MAVZULAR[kalit]}\n\n"
+        f"4/4 — Murojaatingizni batafsil yozing:\n\n"
+        f"/bekor — bekor qilish"
+    )
+
+
+async def xabar_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+
+    # HR javob berish
+    if context.user_data.get("javob_kutilmoqda") and is_hr(uid):
+        await javob_matn_qabul(update, context)
+        return
+
+    # HR rad qilish sababi
+    if context.user_data.get("rad_kutilmoqda") and is_hr(uid):
+        await rad_sabab_qabul(update, context)
+        return
+
+    # Murojaat jarayoni
+    step = context.user_data.get("step")
+
+    if step == STEP_FISH:
+        await fish_qabul(update, context)
+    elif step == STEP_TELEFON:
+        await telefon_qabul(update, context)
+    elif step == STEP_XABAR:
+        await xabar_qabul(update, context)
+    else:
+        await update.message.reply_text(
+            "Murojaat qilish uchun /murojaat yuboring.\n"
+            "Murojaatlaringizni ko'rish uchun /murojaatlarim yuboring."
+        )
+
+
+async def fish_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    fish = update.message.text.strip()
+    if len(fish) < 5:
+        await update.message.reply_text(
+            "Iltimos, to'liq Familiya Ism Sharifingizni kiriting.\n\n"
+            "(Masalan: Karimov Sardor Aliyevich)"
+        )
+        return
+    context.user_data["fish"] = fish
+    context.user_data["step"] = STEP_TELEFON
+    await update.message.reply_text(
+        f"FISH: {fish}\n\n"
+        f"2/4 — Telefon raqamingizni kiriting:\n"
+        f"(Masalan: +998901234567)\n\n"
+        f"/bekor — bekor qilish"
+    )
+
+
+async def telefon_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    telefon = update.message.text.strip()
+    if len(telefon) < 7:
+        await update.message.reply_text(
+            "Iltimos, to'g'ri telefon raqam kiriting.\n"
+            "(Masalan: +998901234567)"
+        )
+        return
+    context.user_data["telefon"] = telefon
+    context.user_data["step"] = STEP_MAVZU
+    await update.message.reply_text(
+        f"Telefon: {telefon}\n\n"
+        f"3/4 — Murojaat mavzusini tanlang:",
+        reply_markup=mavzu_keyboard(),
+    )
+
+
+async def xabar_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("step") != STEP_XABAR:
+        return
+
+    foydalanuvchi = update.effective_user
+    matn     = update.message.text
+    fish     = context.user_data.get("fish", "")
+    telefon  = context.user_data.get("telefon", "")
+    mavzu    = context.user_data.get("mavzu", "Noma'lum")
+
+    m = murojaat_qoshish(
+        user_id      = foydalanuvchi.id,
+        telegram_ism = foydalanuvchi.full_name,
+        username     = foydalanuvchi.username,
+        fish         = fish,
+        telefon      = telefon,
+        mavzu        = mavzu,
+        matn         = matn,
+    )
+    context.user_data.clear()
+    logger.info("Yangi murojaat %s: %s", m["raqam"], fish)
+
+    await update.message.reply_text(
+        f"Murojaatingiz qabul qilindi!\n\n"
+        f"Murojaat raqami: {m['raqam']}\n"
+        f"Yuborilgan sana: {m['yaratilgan'][:16]}\n"
+        f"Holat: {HOLATLAR['yangi']}\n\n"
+        f"Murojaatlaringizni kuzatish: /murojaatlarim\n\n"
+        f"Yana murojaat qilmoqchimisiz? /murojaat"
+    )
+
+    await hr_larga_yuborish(
+        context.bot,
+        hr_murojaat_matni(m),
+        holat_keyboard(m["raqam"]),
+    )
+
+
 # ─── HR PANEL ────────────────────────────────────────────────────────────────
 
 async def hr_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -232,16 +325,16 @@ async def hr_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rad     = sum(1 for m in murojaatlar if m["holat"] == "rad")
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"Yangi ({yangi})",        callback_data="hr_list_yangi"),
-         InlineKeyboardButton(f"Jarayonda ({jarayon})",  callback_data="hr_list_jarayonda")],
-        [InlineKeyboardButton(f"Hal qilingan ({hal})",   callback_data="hr_list_hal"),
-         InlineKeyboardButton(f"Rad qilingan ({rad})",   callback_data="hr_list_rad")],
+        [InlineKeyboardButton(f"Yangi ({yangi})",          callback_data="hr_list_yangi"),
+         InlineKeyboardButton(f"Jarayonda ({jarayon})",    callback_data="hr_list_jarayonda")],
+        [InlineKeyboardButton(f"Hal qilingan ({hal})",     callback_data="hr_list_hal"),
+         InlineKeyboardButton(f"Rad qilingan ({rad})",     callback_data="hr_list_rad")],
         [InlineKeyboardButton(f"Hammasi ({len(murojaatlar)})", callback_data="hr_list_all")],
-        [InlineKeyboardButton("HR xodimlar",             callback_data="hr_xodimlar")],
+        [InlineKeyboardButton("HR xodimlar",               callback_data="hr_xodimlar")],
     ])
 
     await update.message.reply_text(
-        f"HR Panel\n\nMurojaatlar statistikasi:",
+        "HR Panel\n\nMurojaatlar statistikasi:",
         reply_markup=keyboard,
     )
 
@@ -269,7 +362,7 @@ async def hr_list_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
     for m in murojaatlar[:20]:
         holat_nomi = HOLATLAR.get(m["holat"], "")
-        tugma = f"{holat_nomi} | {m['raqam']} — {m['ism'][:15]}"
+        tugma = f"{holat_nomi} | {m['raqam']} — {m['fish'][:20]}"
         keyboard.append([InlineKeyboardButton(tugma, callback_data=f"mko_{m['raqam']}")])
     keyboard.append([InlineKeyboardButton("Orqaga", callback_data="hr_orqaga")])
 
@@ -327,7 +420,9 @@ async def holat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"Murojaatingiz holati yangilandi!\n\n"
                  f"Raqam: {raqam}\n"
                  f"Mavzu: {m['mavzu']}\n"
-                 f"Holat: {holat_nomi}",
+                 f"Sana: {m['yaratilgan'][:16]}\n"
+                 f"Holat: {holat_nomi}\n\n"
+                 f"Batafsil: /murojaatlarim"
         )
     except Exception as e:
         logger.warning("Foydalanuvchiga xabar yuborishda xato: %s", e)
@@ -348,7 +443,7 @@ async def rad_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         f"{raqam} ni rad qilish uchun sabab yozing:\n\n"
         f"Murojaat: {m['matn'][:150]}\n\n"
-        f"/bekor — bekor qilish",
+        f"/bekor — bekor qilish"
     )
 
 
@@ -362,7 +457,6 @@ async def rad_sabab_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     holat_yangilash(raqam, "rad", sabab)
     m = murojaat_raqam(raqam)
-
     await update.message.reply_text(f"Murojaat {raqam} rad qilindi.")
 
     try:
@@ -370,8 +464,10 @@ async def rad_sabab_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=m["user_id"],
             text=f"Murojaatingiz rad qilindi.\n\n"
                  f"Raqam: {raqam}\n"
-                 f"Mavzu: {m['mavzu']}\n\n"
-                 f"Sabab:\n{sabab}",
+                 f"Mavzu: {m['mavzu']}\n"
+                 f"Sana: {m['yaratilgan'][:16]}\n\n"
+                 f"Sabab:\n{sabab}\n\n"
+                 f"Batafsil: /murojaatlarim"
         )
     except Exception as e:
         logger.warning("Foydalanuvchiga rad xabari yuborishda xato: %s", e)
@@ -391,8 +487,10 @@ async def javob_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     m = murojaat_raqam(raqam)
     await query.edit_message_text(
         f"{raqam} ga javob yozing:\n\n"
-        f"Murojaat: {m['matn'][:150]}\n\n"
-        f"/bekor — bekor qilish",
+        f"Murojaatchi: {m['fish']}\n"
+        f"Mavzu: {m['mavzu']}\n"
+        f"Xabar: {m['matn'][:150]}\n\n"
+        f"/bekor — bekor qilish"
     )
 
 
@@ -406,22 +504,23 @@ async def javob_matn_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     holat_yangilash(raqam, "hal", javob)
     m = murojaat_raqam(raqam)
-
-    await update.message.reply_text(f"Javob yuborildi! {raqam} holati: Hal qilindi.")
+    await update.message.reply_text(f"Javob yuborildi! {raqam} — Hal qilindi.")
 
     try:
         await context.bot.send_message(
             chat_id=m["user_id"],
-            text=f"Murojaatingizga HR bo'limidan javob!\n\n"
+            text=f"Murojaatingizga HR bo'limidan javob keldi!\n\n"
                  f"Raqam: {raqam}\n"
-                 f"Mavzu: {m['mavzu']}\n\n"
-                 f"Javob:\n{javob}",
+                 f"Mavzu: {m['mavzu']}\n"
+                 f"Yuborilgan sana: {m['yaratilgan'][:16]}\n\n"
+                 f"Javob:\n{javob}\n\n"
+                 f"Batafsil: /murojaatlarim"
         )
     except Exception as e:
         logger.warning("Foydalanuvchiga javob yuborishda xato: %s", e)
 
 
-# ─── HR XODIMLAR BOSHQARUVI ──────────────────────────────────────────────────
+# ─── HR XODIMLAR ─────────────────────────────────────────────────────────────
 
 async def hr_xodimlar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -444,17 +543,14 @@ async def hr_xodimlar_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         matn += "Hozircha qo'shimcha HR xodimlar yo'q.\n"
     matn += "\nYangi HR qo'shish: /hr_qosh <user_id> <ism>"
     keyboard.append([InlineKeyboardButton("Orqaga", callback_data="hr_orqaga")])
-
     await query.edit_message_text(matn, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def hr_del_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     if query.from_user.id != BOSH_HR_ID:
         return
-
     user_id = int(query.data.replace("hr_del_", ""))
     hr_ochirish(user_id)
     await query.edit_message_text("HR xodim o'chirildi.")
@@ -490,12 +586,12 @@ async def hr_orqaga_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     rad     = sum(1 for m in murojaatlar if m["holat"] == "rad")
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"Yangi ({yangi})",        callback_data="hr_list_yangi"),
-         InlineKeyboardButton(f"Jarayonda ({jarayon})",  callback_data="hr_list_jarayonda")],
-        [InlineKeyboardButton(f"Hal qilingan ({hal})",   callback_data="hr_list_hal"),
-         InlineKeyboardButton(f"Rad qilingan ({rad})",   callback_data="hr_list_rad")],
+        [InlineKeyboardButton(f"Yangi ({yangi})",          callback_data="hr_list_yangi"),
+         InlineKeyboardButton(f"Jarayonda ({jarayon})",    callback_data="hr_list_jarayonda")],
+        [InlineKeyboardButton(f"Hal qilingan ({hal})",     callback_data="hr_list_hal"),
+         InlineKeyboardButton(f"Rad qilingan ({rad})",     callback_data="hr_list_rad")],
         [InlineKeyboardButton(f"Hammasi ({len(murojaatlar)})", callback_data="hr_list_all")],
-        [InlineKeyboardButton("HR xodimlar",             callback_data="hr_xodimlar")],
+        [InlineKeyboardButton("HR xodimlar",               callback_data="hr_xodimlar")],
     ])
 
     await query.edit_message_text(
@@ -507,21 +603,9 @@ async def hr_orqaga_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def bekor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "Bekor qilindi.",
-        reply_markup=mavzu_keyboard(),
+        "Bekor qilindi.\n\n"
+        "Murojaat qilish uchun /murojaat yuboring."
     )
-
-
-# ─── DISPATCHER ──────────────────────────────────────────────────────────────
-
-async def xabar_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    if context.user_data.get("javob_kutilmoqda") and is_hr(uid):
-        await javob_matn_qabul(update, context)
-    elif context.user_data.get("rad_kutilmoqda") and is_hr(uid):
-        await rad_sabab_qabul(update, context)
-    else:
-        await xabar_qabul(update, context)
 
 
 # ─── MAIN ────────────────────────────────────────────────────────────────────
@@ -531,6 +615,7 @@ def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start",         start))
+    app.add_handler(CommandHandler("murojaat",      murojaat_boshlash))
     app.add_handler(CommandHandler("murojaatlarim", mening_murojaatlarim))
     app.add_handler(CommandHandler("hr",            hr_panel))
     app.add_handler(CommandHandler("hr_qosh",       hr_qosh_command))
