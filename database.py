@@ -6,14 +6,15 @@ DB_FILE = "hr.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-
     c.execute("""
         CREATE TABLE IF NOT EXISTS murojaatlar (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             raqam       TEXT UNIQUE NOT NULL,
             user_id     INTEGER NOT NULL,
-            ism         TEXT NOT NULL,
+            telegram_ism TEXT NOT NULL,
             username    TEXT,
+            fish        TEXT NOT NULL,
+            telefon     TEXT NOT NULL,
             mavzu       TEXT NOT NULL,
             matn        TEXT NOT NULL,
             holat       TEXT NOT NULL DEFAULT 'yangi',
@@ -22,7 +23,6 @@ def init_db():
             yangilangan DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
-
     c.execute("""
         CREATE TABLE IF NOT EXISTS hr_xodimlar (
             id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,12 +30,9 @@ def init_db():
             ism     TEXT NOT NULL
         )
     """)
-
     conn.commit()
     conn.close()
 
-
-# ── Murojaat ─────────────────────────────────────────────────────────────────
 
 def yangi_raqam() -> str:
     conn = sqlite3.connect(DB_FILE)
@@ -43,17 +40,18 @@ def yangi_raqam() -> str:
     c.execute("SELECT COUNT(*) FROM murojaatlar")
     n = c.fetchone()[0] + 1
     conn.close()
-    return f"№{n:04d}"
+    return f"MR-{n:04d}"
 
 
-def murojaat_qoshish(user_id, ism, username, mavzu, matn) -> dict:
+def murojaat_qoshish(user_id, telegram_ism, username, fish, telefon, mavzu, matn) -> dict:
     raqam = yangi_raqam()
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("""
-        INSERT INTO murojaatlar (raqam, user_id, ism, username, mavzu, matn)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (raqam, user_id, ism, username, mavzu, matn))
+        INSERT INTO murojaatlar
+            (raqam, user_id, telegram_ism, username, fish, telefon, mavzu, matn)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (raqam, user_id, telegram_ism, username, fish, telefon, mavzu, matn))
     row_id = c.lastrowid
     conn.commit()
     conn.close()
@@ -121,8 +119,6 @@ def foydalanuvchi_murojaatlari(user_id: int) -> list:
     conn.close()
     return [dict(r) for r in rows]
 
-
-# ── HR xodimlar ──────────────────────────────────────────────────────────────
 
 def hr_qoshish(user_id: int, ism: str):
     conn = sqlite3.connect(DB_FILE)
